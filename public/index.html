@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Imposter</title>
+<style>
+  :root {
+    --bg: #0f1020;
+    --card: #1a1b2e;
+    --card2: #232442;
+    --text: #eceef8;
+    --muted: #9497b8;
+    --accent: #ff4757;
+    --accent2: #7c5cff;
+    --good: #2ed573;
+    --warn: #ffa502;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 16px; padding-bottom: 90px; }
+  h1 { font-size: 2rem; text-align: center; margin: 24px 0 4px; letter-spacing: 2px; }
+  h1 .red { color: var(--accent); }
+  .tagline { text-align: center; color: var(--muted); margin-bottom: 24px; font-size: 0.9rem; }
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 14px;
+    border: 1px solid #2b2d52;
+  }
+  label { display: block; color: var(--muted); font-size: 0.8rem; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+  input[type=text] {
+    width: 100%;
+    padding: 13px 14px;
+    border-radius: 10px;
+    border: 1px solid #34366a;
+    background: var(--card2);
+    color: var(--text);
+    font-size: 1.05rem;
+    outline: none;
+  }
+  input[type=text]:focus { border-color: var(--accent2); }
+  button {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent2);
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: opacity .15s;
+  }
+  button:active { opacity: .8; }
+  button.secondary { background: var(--card2); border: 1px solid #34366a; }
+  button.danger { background: var(--accent); }
+  button.small { width: auto; padding: 8px 14px; font-size: 0.85rem; margin: 0; }
+  button:disabled { opacity: .4; cursor: default; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  .hidden { display: none !important; }
+  .code-badge {
+    text-align: center;
+    font-size: 2.2rem;
+    letter-spacing: 10px;
+    font-weight: 800;
+    color: var(--warn);
+    margin: 4px 0;
+    user-select: all;
+  }
+  .players { display: flex; flex-direction: column; gap: 8px; }
+  .player {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card2); border-radius: 10px; padding: 10px 12px;
+  }
+  .player .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); flex: none; }
+  .player.off .dot { background: var(--muted); }
+  .player.dead { opacity: .45; text-decoration: line-through; }
+  .player .name { flex: 1; font-weight: 600; }
+  .badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 20px; background: var(--accent2); color: #fff; font-weight: 700; }
+  .badge.you { background: var(--good); color: #08341c; }
+  .stepper { display: flex; align-items: center; gap: 12px; }
+  .stepper button { width: 42px; height: 42px; margin: 0; font-size: 1.3rem; padding: 0; background: var(--card2); border: 1px solid #34366a; }
+  .stepper .val { font-size: 1.3rem; font-weight: 800; min-width: 32px; text-align: center; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    padding: 8px 14px; border-radius: 20px; background: var(--card2);
+    border: 1px solid #34366a; color: var(--muted); font-size: 0.85rem; cursor: pointer; font-weight: 600;
+  }
+  .chip.on { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+  .seg { display: flex; background: var(--card2); border-radius: 10px; padding: 4px; }
+  .seg button { margin: 0; background: transparent; font-size: 0.85rem; padding: 9px; border-radius: 8px; font-weight: 600; color: var(--muted); }
+  .seg button.on { background: var(--accent2); color: #fff; }
+  .word-card {
+    text-align: center; padding: 22px 16px; border-radius: var(--radius);
+    background: linear-gradient(135deg, #2b2d52, #1a1b2e);
+    border: 1px solid #3b3e78; margin-bottom: 14px; cursor: pointer;
+  }
+  .word-card .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
+  .word-card .word { font-size: 1.9rem; font-weight: 800; }
+  .word-card.imposter { background: linear-gradient(135deg, #4a1420, #1a1b2e); border-color: #7a2334; }
+  .word-card.imposter .word { color: var(--accent); }
+  .word-card .hint { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
+  .clue-feed { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; }
+  .clue { background: var(--card2); border-radius: 10px; padding: 9px 12px; font-size: 0.95rem; }
+  .clue .who { color: var(--accent2); font-weight: 700; margin-right: 6px; }
+  .clue .cyc { color: var(--muted); font-size: 0.75rem; float: right; }
+  .turn-banner { text-align: center; padding: 12px; border-radius: 10px; background: var(--card2); margin-bottom: 12px; font-weight: 600; }
+  .turn-banner.me { background: var(--good); color: #08341c; }
+  .event {
+    text-align: center; padding: 14px; border-radius: 10px; margin-bottom: 12px;
+    background: #2b2032; border: 1px solid #53355f; font-size: 0.95rem;
+  }
+  .vote-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--card2); border: 1px solid #34366a; color: var(--text);
+    text-align: left; font-weight: 600;
+  }
+  .vote-btn.sel { border-color: var(--accent); background: #3a1b26; }
+  .big-result { text-align: center; padding: 24px 16px; }
+  .big-result .emoji { font-size: 3rem; }
+  .big-result .title { font-size: 1.6rem; font-weight: 800; margin: 8px 0; }
+  .big-result .sub { color: var(--muted); }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #fff; padding: 12px 20px; border-radius: 30px;
+    font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 90%;
+    text-align: center; z-index: 99;
+  }
+  .toast.show { opacity: 1; }
+  .muted { color: var(--muted); font-size: 0.85rem; }
+  .timer { font-weight: 800; color: var(--warn); }
+  .mb8 { margin-bottom: 8px; } .mb14 { margin-bottom: 14px; } .mt14 { margin-top: 14px; }
+  .center { text-align: center; }
+  .music-btn {
+    position: fixed; top: 12px; right: 12px; z-index: 50;
+    width: 42px; height: 42px; margin: 0; padding: 0;
+    border-radius: 50%; font-size: 1.2rem;
+    background: var(--card2); border: 1px solid #34366a;
+  }
+  .music-btn.off { opacity: .5; }
+</style>
+</head>
+<body>
+<audio id="bgm" src="/bgm.mp3" loop preload="auto"></audio>
+<button class="music-btn" id="btn-music" title="Toggle music">🎵</button>
+<div class="wrap">
+  <h1>IMP<span class="red">O</span>STER</h1>
+  <p class="tagline">Everyone gets the word. Except someone…</p>
+
+  <!-- HOME -->
+  <div id="screen-home">
+    <div class="card">
+      <label>Your name</label>
+      <input type="text" id="inp-name" maxlength="20" placeholder="e.g. Krishna">
+    </div>
+    <div class="card">
+      <button id="btn-create">Create Room</button>
+      <div class="row mt14">
+        <input type="text" id="inp-code" maxlength="4" placeholder="CODE" style="text-transform:uppercase; text-align:center; letter-spacing:4px;">
+        <button id="btn-join" class="secondary" style="margin:0;">Join</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOBBY -->
+  <div id="screen-lobby" class="hidden">
+    <div class="card center">
+      <label>Room code — share with friends</label>
+      <div class="code-badge" id="lobby-code">----</div>
+      <button id="btn-share" class="secondary small">Copy invite link</button>
+    </div>
+    <div class="card">
+      <label>Players (<span id="lobby-count">0</span>)</label>
+      <div class="players" id="lobby-players"></div>
+    </div>
+    <div class="card" id="host-settings">
+      <label>Imposters</label>
+      <div class="stepper mb14">
+        <button id="imp-minus">−</button>
+        <div class="val" id="imp-val">1</div>
+        <button id="imp-plus">+</button>
+      </div>
+      <label>Imposter sees</label>
+      <div class="seg mb14" id="hint-seg">
+        <button data-v="category" class="on">Category hint</button>
+        <button data-v="none">Nothing 😈</button>
+      </div>
+      <label>Clue rounds before each vote</label>
+      <div class="seg mb14" id="rounds-seg">
+        <button data-v="1" class="on">1</button>
+        <button data-v="2">2</button>
+        <button data-v="3">3</button>
+      </div>
+      <label>Topics</label>
+      <div class="chips" id="topic-chips"></div>
+    </div>
+    <div class="card hidden" id="guest-settings">
+      <p class="muted center" id="guest-settings-text"></p>
+    </div>
+    <button id="btn-start" class="danger">Start Game</button>
+    <button id="btn-leave" class="secondary">Leave room</button>
+  </div>
+
+  <!-- GAME (clue phase) -->
+  <div id="screen-game" class="hidden">
+    <div class="word-card" id="word-card">
+      <div class="label" id="word-label">Your word</div>
+      <div class="word" id="word-text">???</div>
+      <div class="hint" id="word-hint">tap to hide/show</div>
+    </div>
+    <div class="event hidden" id="game-event"></div>
+    <div class="turn-banner" id="turn-banner"></div>
+    <div class="card hidden" id="clue-input-card">
+      <label>Your clue (don't say the word!)</label>
+      <div class="row">
+        <input type="text" id="inp-clue" maxlength="60" placeholder="a subtle reference…">
+        <button id="btn-clue" style="margin:0; flex:0 0 80px;">Send</button>
+      </div>
+    </div>
+    <div class="card">
+      <label>Clues — round <span id="clue-round">1</span></label>
+      <div class="clue-feed" id="clue-feed"><p class="muted">No clues yet.</p></div>
+    </div>
+    <div class="card">
+      <label>Players</label>
+      <div class="players" id="game-players"></div>
+    </div>
+  </div>
+
+  <!-- VOTE -->
+  <div id="screen-vote" class="hidden">
+    <div class="card center">
+      <div style="font-size:2rem;">🗳️</div>
+      <p style="font-weight:700; font-size:1.2rem; margin:6px 0;">Who is the imposter?</p>
+      <p class="muted" id="vote-progress"></p>
+    </div>
+    <div class="card">
+      <div class="players" id="vote-options" style="gap:10px;"></div>
+    </div>
+    <div class="card">
+      <label>All clues</label>
+      <div class="clue-feed" id="vote-clues"></div>
+    </div>
+  </div>
+
+  <!-- GUESS -->
+  <div id="screen-guess" class="hidden">
+    <div class="card center">
+      <div style="font-size:2.4rem;">😱</div>
+      <p style="font-weight:700; font-size:1.15rem; margin:8px 0;" id="guess-title"></p>
+      <p class="muted mb8">If they guess the word, imposters steal the win! <span class="timer" id="guess-timer"></span></p>
+    </div>
+    <div class="card hidden" id="guess-input-card">
+      <label>Your one guess at the word</label>
+      <div class="row">
+        <input type="text" id="inp-guess" maxlength="60" placeholder="the secret word…">
+        <button id="btn-guess" class="danger" style="margin:0; flex:0 0 90px;">Guess!</button>
+      </div>
+    </div>
+    <button id="btn-skip-guess" class="secondary hidden">Skip (host)</button>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="screen-over" class="hidden">
+    <div class="card big-result">
+      <div class="emoji" id="over-emoji">🎉</div>
+      <div class="title" id="over-title"></div>
+      <div class="sub" id="over-sub"></div>
+    </div>
+    <div class="event hidden" id="over-event"></div>
+    <div class="card">
+      <label>The reveal</label>
+      <p class="mb8">Word: <b id="over-word"></b> <span class="muted" id="over-category"></span></p>
+      <p>Imposter(s): <b id="over-imposters" style="color:var(--accent)"></b></p>
+    </div>
+    <button id="btn-again" class="hidden">Play Again</button>
+    <p class="muted center mt14" id="over-wait"></p>
+    <button id="btn-leave2" class="secondary">Leave room</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/client.js"></script>
+</body>
+</html>
