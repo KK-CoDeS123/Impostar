@@ -84,7 +84,11 @@
   }
   .player .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); flex: none; }
   .player.off .dot { background: var(--muted); }
-  .player.dead { opacity: .45; text-decoration: line-through; }
+  .player.turn {
+    border: 1px solid var(--warn);
+    background: #2e2a1b;
+    box-shadow: 0 0 10px rgba(255, 165, 2, .25);
+  }
   .player .name { flex: 1; font-weight: 600; }
   .badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 20px; background: var(--accent2); color: #fff; font-weight: 700; }
   .badge.you { background: var(--good); color: #08341c; }
@@ -195,11 +199,18 @@
         <button data-v="category" class="on">Category hint</button>
         <button data-v="none">Nothing 😈</button>
       </div>
-      <label>Clue rounds before each vote</label>
+      <label>Clue rounds</label>
       <div class="seg mb14" id="rounds-seg">
-        <button data-v="1" class="on">1</button>
-        <button data-v="2">2</button>
+        <button data-v="1">1</button>
+        <button data-v="2" class="on">2</button>
         <button data-v="3">3</button>
+        <button data-v="4">4</button>
+        <button data-v="5">5</button>
+      </div>
+      <label>If the imposter is caught</label>
+      <div class="seg mb14" id="guess-seg">
+        <button data-v="off" class="on">Civilians win</button>
+        <button data-v="on">Can steal by guessing word</button>
       </div>
       <label>Topics</label>
       <div class="chips" id="topic-chips"></div>
@@ -228,7 +239,7 @@
       </div>
     </div>
     <div class="card">
-      <label>Clues — round <span id="clue-round">1</span></label>
+      <label>Round <span id="round-num">1</span> of <span id="round-total">2</span> — Clues</label>
       <div class="clue-feed" id="clue-feed"><p class="muted">No clues yet.</p></div>
     </div>
     <div class="card">

@@ -1,4 +1,4 @@
-const path = require("path");
+﻿const path = require("path");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -34,11 +34,12 @@ function makeRoom(code) {
   return {
     code,
     hostId: null,
-    players: [], // {id, token, name, connected, alive, socketId}
+    players: [], // {id, token, name, connected, socketId}
     settings: {
       imposters: 1,
       hint: "category", // "category" | "none"
-      cluesPerVote: 1, // clue rounds before each vote
+      rounds: 2, // clue rounds before the final vote
+      guessMode: false, // caught imposter can steal by guessing the word
       topics: Object.keys(TOPICS)
     },
     phase: "lobby", // lobby | clue | vote | guess | over
@@ -47,9 +48,8 @@ function makeRoom(code) {
     imposterIds: [],
     turnOrder: [],
     turnIdx: 0,
-    clueRound: 1,
-    cycle: 1, // increments each vote phase
-    clues: [], // {playerId, name, text, round, cycle}
+    round: 1,
+    clues: [], // {playerId, name, text, round}
     votes: {}, // voterId -> targetId
     lastEvent: null, // announcement shown between phases
     guessingPlayerId: null,
@@ -64,14 +64,6 @@ function getPlayer(room, playerId) {
   return room.players.find((p) => p.id === playerId);
 }
 
-function alivePlayers(room) {
-  return room.players.filter((p) => p.alive);
-}
-
-function aliveImposters(room) {
-  return alivePlayers(room).filter((p) => room.imposterIds.includes(p.id));
-}
-
 function publicState(room) {
   return {
     code: room.code,
@@ -81,14 +73,12 @@ function publicState(room) {
     players: room.players.map((p) => ({
       id: p.id,
       name: p.name,
-      connected: p.connected,
-      alive: p.alive
+      connected: p.connected
     })),
     turnOrder: room.turnOrder,
     currentTurn: room.phase === "clue" ? room.turnOrder[room.turnIdx] : null,
-    clueRound: room.clueRound,
-    cluesPerVote: room.settings.cluesPerVote,
-    cycle: room.cycle,
+    round: room.round,
+    rounds: room.settings.rounds,
     clues: room.clues,
     votedIds: Object.keys(room.votes),
     lastEvent: room.lastEvent,
@@ -116,10 +106,7 @@ function sendRole(room, player) {
 }
 
 function startGame(room) {
-  const players = room.players.filter((p) => p.connected);
-  // Reset all players
-  room.players = players;
-  room.players.forEach((p) => (p.alive = true));
+  room.players = room.players.filter((p) => p.connected);
 
   // Pick word from selected topics
   const topicKeys = room.settings.topics.filter((k) => TOPICS[k]);
@@ -136,8 +123,7 @@ function startGame(room) {
   // Turn order
   room.turnOrder = [...room.players].sort(() => Math.random() - 0.5).map((p) => p.id);
   room.turnIdx = 0;
-  room.clueRound = 1;
-  room.cycle = 1;
+  room.round = 1;
   room.clues = [];
   room.votes = {};
   room.winner = null;
@@ -150,13 +136,6 @@ function startGame(room) {
 }
 
 function advanceTurn(room) {
-  // Move to next alive, connected player; skip disconnected/eliminated
-  const order = room.turnOrder.filter((id) => {
-    const p = getPlayer(room, id);
-    return p && p.alive;
-  });
-  // Rebuild pointer within filtered order
-  room.turnOrder = order;
   room.turnIdx++;
   // Skip disconnected players (they lose their clue turn)
   while (room.turnIdx < room.turnOrder.length) {
@@ -165,9 +144,9 @@ function advanceTurn(room) {
     room.turnIdx++;
   }
   if (room.turnIdx >= room.turnOrder.length) {
-    // Clue round complete
-    if (room.clueRound < room.settings.cluesPerVote) {
-      room.clueRound++;
+    // Round complete
+    if (room.round < room.settings.rounds) {
+      room.round++;
       room.turnIdx = 0;
       while (room.turnIdx < room.turnOrder.length) {
         const p = getPlayer(room, room.turnOrder[room.turnIdx]);
@@ -175,6 +154,7 @@ function advanceTurn(room) {
         room.turnIdx++;
       }
     } else {
+      // All rounds done — final vote
       room.phase = "vote";
       room.votes = {};
     }
@@ -182,7 +162,7 @@ function advanceTurn(room) {
 }
 
 function requiredVoters(room) {
-  return alivePlayers(room).filter((p) => p.connected);
+  return room.players.filter((p) => p.connected);
 }
 
 function tallyVotes(room) {
@@ -192,15 +172,6 @@ function tallyVotes(room) {
   Object.values(counts).forEach((c) => (c > max ? (max = c) : null));
   const top = Object.keys(counts).filter((id) => counts[id] === max);
   return { counts, top, max };
-}
-
-function nextClueCycle(room) {
-  room.cycle++;
-  room.clueRound = 1;
-  room.turnIdx = 0;
-  room.turnOrder = alivePlayers(room).map((p) => p.id).sort(() => Math.random() - 0.5);
-  room.votes = {};
-  room.phase = "clue";
 }
 
 function endGame(room, winner) {
@@ -234,47 +205,39 @@ function resolveVote(room) {
   const countsByName = voteCounts(room);
 
   if (top.length !== 1 || max === 0) {
-    // Tie or no votes: nobody eliminated, play another clue cycle
+    // No clear accusation — the imposters slip away
     room.lastEvent = { type: "tie", counts: countsByName };
-    nextClueCycle(room);
+    endGame(room, "imposters");
     broadcast(room);
     return;
   }
 
   const target = getPlayer(room, top[0]);
-  target.alive = false;
   const wasImposter = room.imposterIds.includes(target.id);
   room.lastEvent = {
-    type: "elimination",
+    type: "accusation",
     name: target.name,
     wasImposter,
     counts: countsByName
   };
 
-  if (wasImposter) {
-    // Eliminated imposter gets one chance to guess the word
+  if (!wasImposter) {
+    endGame(room, "imposters");
+    broadcast(room);
+    return;
+  }
+
+  if (room.settings.guessMode) {
+    // Caught imposter gets one chance to guess the word and steal the win
     room.phase = "guess";
     room.guessingPlayerId = target.id;
     room.guessDeadline = Date.now() + GUESS_SECONDS * 1000;
     room.guessTimer = setTimeout(() => finishGuess(room, null), GUESS_SECONDS * 1000);
     broadcast(room);
   } else {
-    afterElimination(room);
-  }
-}
-
-function afterElimination(room) {
-  const impostersLeft = aliveImposters(room).length;
-  const civiliansLeft = alivePlayers(room).length - impostersLeft;
-
-  if (impostersLeft === 0) {
     endGame(room, "civilians");
-  } else if (impostersLeft >= civiliansLeft) {
-    endGame(room, "imposters");
-  } else {
-    nextClueCycle(room);
+    broadcast(room);
   }
-  broadcast(room);
 }
 
 function finishGuess(room, guess) {
@@ -294,12 +257,8 @@ function finishGuess(room, guess) {
   };
   room.guessingPlayerId = null;
   room.guessDeadline = null;
-  if (correct) {
-    endGame(room, "imposters");
-    broadcast(room);
-  } else {
-    afterElimination(room);
-  }
+  endGame(room, correct ? "imposters" : "civilians");
+  broadcast(room);
 }
 
 io.on("connection", (socket) => {
@@ -313,7 +272,6 @@ io.on("connection", (socket) => {
       token: genToken(),
       name,
       connected: true,
-      alive: true,
       socketId: socket.id
     };
     room.players.push(player);
@@ -376,7 +334,6 @@ io.on("connection", (socket) => {
       token: genToken(),
       name,
       connected: true,
-      alive: true,
       socketId: socket.id
     };
     room.players.push(player);
@@ -400,7 +357,8 @@ io.on("connection", (socket) => {
     const s = room.settings;
     if (Number.isInteger(settings.imposters)) s.imposters = Math.min(4, Math.max(1, settings.imposters));
     if (settings.hint === "category" || settings.hint === "none") s.hint = settings.hint;
-    if (Number.isInteger(settings.cluesPerVote)) s.cluesPerVote = Math.min(3, Math.max(1, settings.cluesPerVote));
+    if (Number.isInteger(settings.rounds)) s.rounds = Math.min(5, Math.max(1, settings.rounds));
+    if (typeof settings.guessMode === "boolean") s.guessMode = settings.guessMode;
     if (Array.isArray(settings.topics)) {
       const valid = settings.topics.filter((k) => TOPICS[k]);
       if (valid.length > 0) s.topics = valid;
@@ -430,8 +388,7 @@ io.on("connection", (socket) => {
       playerId: player.id,
       name: player.name,
       text,
-      round: room.clueRound,
-      cycle: room.cycle
+      round: room.round
     });
     room.lastEvent = null;
     advanceTurn(room);
@@ -441,9 +398,8 @@ io.on("connection", (socket) => {
   socket.on("castVote", ({ targetId }) => {
     const { room, player } = ctx();
     if (!room || !player || room.phase !== "vote") return;
-    if (!player.alive) return;
     const target = getPlayer(room, targetId);
-    if (!target || !target.alive) return;
+    if (!target) return;
     if (targetId === player.id) return; // can't vote yourself
     room.votes[player.id] = targetId;
     const needed = requiredVoters(room);
@@ -480,7 +436,6 @@ io.on("connection", (socket) => {
     room.reveal = null;
     room.lastEvent = null;
     room.players = room.players.filter((p) => p.connected);
-    room.players.forEach((p) => (p.alive = true));
     broadcast(room);
   });
 
@@ -555,3 +510,4 @@ io.on("connection", (socket) => {
 server.listen(PORT, () => {
   console.log(`Imposter game running on http://localhost:${PORT}`);
 });
+

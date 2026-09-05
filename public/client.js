@@ -120,7 +120,7 @@ socket.on("connect", () => {
 
 socket.on("state", (s) => {
   if (!me.playerId) return;
-  if (s.phase === "vote" && (!state || state.phase !== "vote" || state.cycle !== s.cycle)) myVote = null;
+  if (s.phase === "vote" && (!state || state.phase !== "vote")) myVote = null;
   state = s;
   render();
 });
@@ -156,10 +156,10 @@ function render() {
   }
 }
 
-function playerRow(p, extras = "") {
+function playerRow(p, extras = "", highlight = false) {
   const cls = ["player"];
   if (!p.connected) cls.push("off");
-  if (!p.alive) cls.push("dead");
+  if (highlight) cls.push("turn");
   const host = p.id === state.hostId ? '<span class="badge">HOST</span>' : "";
   const you = p.id === me.playerId ? '<span class="badge you">YOU</span>' : "";
   return `<div class="${cls.join(" ")}"><div class="dot"></div><div class="name">${esc(p.name)}</div>${you}${host}${extras}</div>`;
@@ -190,7 +190,8 @@ function renderLobby() {
   if (isHost()) {
     $("imp-val").textContent = s.imposters;
     document.querySelectorAll("#hint-seg button").forEach((b) => b.classList.toggle("on", b.dataset.v === s.hint));
-    document.querySelectorAll("#rounds-seg button").forEach((b) => b.classList.toggle("on", +b.dataset.v === s.cluesPerVote));
+    document.querySelectorAll("#rounds-seg button").forEach((b) => b.classList.toggle("on", +b.dataset.v === s.rounds));
+    document.querySelectorAll("#guess-seg button").forEach((b) => b.classList.toggle("on", (b.dataset.v === "on") === s.guessMode));
     $("topic-chips").innerHTML = state.topicsCatalog.map((t) =>
       `<div class="chip ${s.topics.includes(t.key) ? "on" : ""}" onclick="toggleTopic('${t.key}')">${t.name}</div>`
     ).join("");
@@ -198,7 +199,8 @@ function renderLobby() {
     const topicNames = state.topicsCatalog.filter((t) => s.topics.includes(t.key)).map((t) => t.name).join(", ");
     $("guest-settings-text").innerHTML =
       `${s.imposters} imposter(s) · imposter sees ${s.hint === "category" ? "category hint" : "nothing"} · ` +
-      `${s.cluesPerVote} clue round(s) per vote<br>Topics: ${topicNames}<br><br>Waiting for the host to start…`;
+      `${s.rounds} clue round(s) · caught imposter ${s.guessMode ? "can steal by guessing the word" : "loses"}<br>` +
+      `Topics: ${topicNames}<br><br>Waiting for the host to start…`;
   }
 }
 
@@ -214,7 +216,8 @@ window.toggleTopic = (key) => {
 $("imp-minus").onclick = () => socket.emit("updateSettings", { imposters: state.settings.imposters - 1 });
 $("imp-plus").onclick = () => socket.emit("updateSettings", { imposters: state.settings.imposters + 1 });
 document.querySelectorAll("#hint-seg button").forEach((b) => b.onclick = () => socket.emit("updateSettings", { hint: b.dataset.v }));
-document.querySelectorAll("#rounds-seg button").forEach((b) => b.onclick = () => socket.emit("updateSettings", { cluesPerVote: +b.dataset.v }));
+document.querySelectorAll("#rounds-seg button").forEach((b) => b.onclick = () => socket.emit("updateSettings", { rounds: +b.dataset.v }));
+document.querySelectorAll("#guess-seg button").forEach((b) => b.onclick = () => socket.emit("updateSettings", { guessMode: b.dataset.v === "on" }));
 
 $("btn-start").onclick = () => socket.emit("startGame", (res) => {
   if (res && res.error) toast(res.error);
@@ -266,9 +269,16 @@ function renderClues(el) {
     el.innerHTML = '<p class="muted">No clues yet.</p>';
     return;
   }
-  el.innerHTML = state.clues.map((c) =>
-    `<div class="clue"><span class="who">${esc(c.name)}</span>${esc(c.text)}<span class="cyc">R${c.cycle}.${c.round}</span></div>`
-  ).join("");
+  let html = "";
+  let lastRound = 0;
+  state.clues.forEach((c) => {
+    if (state.rounds > 1 && c.round !== lastRound) {
+      html += `<p class="muted center" style="margin:4px 0;">— Round ${c.round} —</p>`;
+      lastRound = c.round;
+    }
+    html += `<div class="clue"><span class="who">${esc(c.name)}</span>${esc(c.text)}</div>`;
+  });
+  el.innerHTML = html;
   el.scrollTop = el.scrollHeight;
 }
 
@@ -280,21 +290,18 @@ function renderGame() {
     ev.classList.remove("hidden");
   } else ev.classList.add("hidden");
 
-  $("clue-round").textContent = `${state.cycle}.${state.clueRound}`;
+  $("round-num").textContent = state.round;
+  $("round-total").textContent = state.rounds;
   const current = state.currentTurn;
-  const myTurn = current === me.playerId && myPlayer() && myPlayer().alive;
+  const myTurn = current === me.playerId;
   const banner = $("turn-banner");
   banner.classList.toggle("me", myTurn);
-  if (myPlayer() && !myPlayer().alive) {
-    banner.textContent = "You were eliminated — spectating 👻";
-  } else {
-    banner.textContent = myTurn ? "✍️ Your turn — drop a clue!" : `Waiting for ${pname(current)}…`;
-  }
+  banner.textContent = myTurn ? "✍️ Your turn — drop a clue!" : `Waiting for ${pname(current)}…`;
   $("clue-input-card").classList.toggle("hidden", !myTurn);
   renderClues($("clue-feed"));
   $("game-players").innerHTML = state.players.map((p) => {
     const turn = p.id === current ? '<span class="badge" style="background:var(--warn); color:#3a2800;">TURN</span>' : "";
-    return playerRow(p, turn);
+    return playerRow(p, turn, p.id === current);
   }).join("");
 }
 
@@ -311,16 +318,14 @@ function sendClue() {
 
 // ---------- VOTE ----------
 function renderVote() {
-  const alive = state.players.filter((p) => p.alive);
-  const voters = alive.filter((p) => p.connected);
+  const voters = state.players.filter((p) => p.connected);
   $("vote-progress").textContent = `${state.votedIds.length}/${voters.length} voted`;
-  const iCanVote = myPlayer() && myPlayer().alive;
   const iVoted = state.votedIds.includes(me.playerId);
 
-  $("vote-options").innerHTML = alive.map((p) => {
+  $("vote-options").innerHTML = state.players.map((p) => {
     if (p.id === me.playerId) return playerRow(p);
     const sel = myVote === p.id ? "sel" : "";
-    const dis = !iCanVote || iVoted ? "disabled" : "";
+    const dis = iVoted ? "disabled" : "";
     return `<button class="vote-btn ${sel}" ${dis} onclick="vote('${p.id}')">
       <span>${esc(p.name)}</span><span>${myVote === p.id ? "✔ voted" : "vote"}</span></button>`;
   }).join("");
@@ -362,9 +367,9 @@ $("btn-skip-guess").onclick = () => socket.emit("skipGuess");
 
 // ---------- OVER ----------
 function eventText(ev) {
-  if (ev.type === "tie") return `🤝 Vote tied — nobody eliminated. More clues!`;
-  if (ev.type === "elimination")
-    return `${esc(ev.name)} was voted out — they were ${ev.wasImposter ? "🔴 an IMPOSTER!" : "🟢 innocent…"}`;
+  if (ev.type === "tie") return `🤝 The vote was split — no clear accusation, and the imposters slip away!`;
+  if (ev.type === "accusation")
+    return `The group accused ${esc(ev.name)} — they were ${ev.wasImposter ? "🔴 the IMPOSTER!" : "🟢 innocent…"}`;
   if (ev.type === "guess")
     return ev.correct
       ? `😈 ${esc(ev.name)} guessed the word${ev.guess ? ` ("${esc(ev.guess)}")` : ""} — imposters steal the win!`

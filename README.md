@@ -2,7 +2,7 @@
 
 An online multiplayer party game for you and your friends (3–16 players).
 
-Everyone secretly receives the same word — except the imposter(s). Each round, every player gives a subtle clue about the word. After the clue rounds, everyone votes on who they think the imposter is. A caught imposter gets one last chance to guess the word and steal the win!
+Everyone secretly receives the same word — except the imposter(s). Each round, every player gives a subtle clue about the word. After the clue rounds, everyone votes once on who they think the imposter is. Accuse an imposter and the civilians win; accuse an innocent (or split the vote) and the imposters win. In steal mode, a caught imposter gets one last chance to guess the word and snatch the victory!
 
 ## Features
 
@@ -10,8 +10,8 @@ Everyone secretly receives the same word — except the imposter(s). Each round,
 - **Configurable imposters** — 1 to 4 imposters per game
 - **Imposter hint modes** — imposter sees the word's category, or nothing at all
 - **Topic packs** — pick which categories words come from (food, movies, sports, tech…)
-- **Clue rounds** — 1–3 clue rounds before each vote
-- **Multiple vote cycles** — ties and wrong votes lead to more clues, like real deduction games
+- **Clue rounds** — 1–5 clue rounds before the final vote
+- **Steal mode** — optionally let a caught imposter win by guessing the secret word
 - **Reconnect support** — refresh or drop your connection and rejoin seamlessly
 - Mobile-friendly — designed to be played from phones
 
@@ -45,5 +45,5 @@ Any Node.js host with WebSocket support works — just run `npm start` with the 
 2. Everyone joins and the host starts the game.
 3. Check your secret word (tap the card to hide it from shoulder-surfers).
 4. On your turn, type a clue — subtle enough that the imposter can't figure out the word, clear enough that other civilians know you know it.
-5. Vote! Wrong vote = the innocent player is eliminated and the game continues. Catch an imposter and they get one guess at the word to steal the win.
-6. Civilians win when all imposters are out. Imposters win by surviving to parity or guessing the word.
+5. After the clue rounds, everyone votes once. Catch an imposter → civilians win. Accuse an innocent or tie the vote → imposters win.
+6. With steal mode on, a caught imposter gets 45 seconds and one guess at the word — correct means the imposters take the win anyway.
